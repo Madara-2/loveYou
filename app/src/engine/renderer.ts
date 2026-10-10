@@ -90,7 +90,7 @@ export class HeartRenderer {
     this.palette = palette;
     this.settings = settings;
     this.callbacks = callbacks;
-    this.shimmerRng = new Rng((settings.seedOffset ?? 7) + ANIMATION_DEFAULTS.seed);
+    this.shimmerRng = new Rng(ANIMATION_DEFAULTS.seed + 7);
   }
 
   // ---- lifecycle ------------------------------------------------------
@@ -200,6 +200,22 @@ export class HeartRenderer {
     this.items = [];
     this.active = [];
     this.sparks = [];
+  }
+
+  /** Render one static frame (used behind the intro screen). */
+  drawStill() {
+    if (!this.layout) return;
+    const wasSpawning = this.spawning;
+    const wasDone = this.done;
+    this.spawning = false;
+    this.done = true; // draw every phrase at rest state
+    for (const p of this.items) p.f = ANIMATION_DEFAULTS.animFrames;
+    this.draw(performance.now());
+    this.spawning = wasSpawning;
+    this.done = wasDone;
+    // If the animation hasn't started yet, rewind to a pristine pre-spawn
+    // state so replaying later behaves identically.
+    if (!wasDone && !wasSpawning) this.resetRuntime();
   }
 
   /** Snapshot the current canvas as a PNG data URL (for export/share). */
@@ -362,8 +378,7 @@ export class HeartRenderer {
       grow: number,
     ) => {
       for (const p of this.items) {
-        const spawned = this.spawning ? pIndexSpawned(p) : true;
-        if (!spawned && p.f <= 0) continue;
+        if (!this.spawning && !this.done && p.f <= 0) continue; // not spawned yet
         const u = clamp01(p.f / ANIMATION_DEFAULTS.animFrames);
         const e = this.settings.phraseAnim ? 1 - (1 - u) ** 3 : 1; // cubic ease-out
         const [x, y] = offset(p, e);
@@ -396,7 +411,7 @@ export class HeartRenderer {
       },
       (p, e) => {
         const hover = (1 - e) * lift;
-        return [p.x + cx + p.dx * (1 - e) + shOff[0], p.y + cy - hover + shOff[1]];
+        return [p.x + p.dx * (1 - e) + shOff[0], p.y - hover + shOff[1]];
       },
       () => 0,
       0,
@@ -411,7 +426,7 @@ export class HeartRenderer {
       },
       (p, e) => {
         const hover = (1 - e) * lift;
-        return [p.x + cx + p.dx * (1 - e), p.y + cy - hover];
+        return [p.x + p.dx * (1 - e), p.y - hover];
       },
       () => 0,
       1,
@@ -434,7 +449,7 @@ export class HeartRenderer {
       },
       (p, e) => {
         const hover = (1 - e) * lift;
-        return [p.x + cx + p.dx * (1 - e), p.y + cy - hover];
+        return [p.x + p.dx * (1 - e), p.y - hover];
       },
       (p, e) => {
         if (e < 1 && this.settings.phraseAnim) return 0;
@@ -480,11 +495,6 @@ export class HeartRenderer {
   }
 }
 
-/** Items are drawn only once spawned; use their progress counter as marker. */
-function pIndexSpawned(p: RuntimePhrase): boolean {
-  return p.f > 0;
-}
-
 function rgbMixToCss(c: [number, number, number]): string {
   const q = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
   return `rgb(${q(c[0])},${q(c[1])},${q(c[2])})`;
@@ -497,11 +507,4 @@ function withAlpha(color: string, mul: number): string {
   const parts = m[1].split(',').map((s) => parseFloat(s));
   const a = (parts[3] ?? 1) * mul;
   return `rgba(${parts[0]},${parts[1]},${parts[2]},${a.toFixed(3)})`;
-}
-
-// small helper typing shim so settings can carry a seed offset
-declare module '@/config/types' {
-  interface EngineSettings {
-    seedOffset?: number;
-  }
 }
