@@ -185,7 +185,16 @@ export function buildLayout(input: LayoutInput): LayoutResult {
 
       line.forEach((it, i) => {
         const edge = i === 0 || i === line.length - 1;
-        placed.push({ x: it.cx + CX, y, text: it.text, size: it.size, w: it.w, edge });
+        // Store final positions directly in canvas space so the renderer can
+        // draw and hit-test without extra offsets.
+        placed.push({
+          x: it.cx + CX + cssWidth / 2,
+          y: y + CY + cssHeight / 2,
+          text: it.text,
+          size: it.size,
+          w: it.w,
+          edge,
+        });
       });
     }
   }
